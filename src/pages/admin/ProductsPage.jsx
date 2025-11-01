@@ -1,7 +1,8 @@
 // src/pages/admin/ProductsPage.jsx
 import React from "react";
-import ProductList from "../../components/Products/ProductList";
-import AddProduct from "../../components/Products/AddProduct";
+import ProductList from "../../Components/Products/ProductList";
+import AddProduct from "../../Components/Products/AddProduct";
+
 
 const ProductsPage = () => {
   return (
