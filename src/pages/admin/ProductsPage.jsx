@@ -3,7 +3,6 @@ import React from "react";
 import ProductList from "../../Components/Products/ProductList";
 import AddProduct from "../../Components/Products/AddProduct";
 
-
 const ProductsPage = () => {
   return (
     <div className="space-y-6">
