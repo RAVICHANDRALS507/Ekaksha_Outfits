@@ -1,6 +1,6 @@
 // src/pages/AdminLogin.jsx
 import React, { useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../../supabaseClient";
 import { useNavigate } from "react-router-dom";
 
 const AdminLogin = () => {

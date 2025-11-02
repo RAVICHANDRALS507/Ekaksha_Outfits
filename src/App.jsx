@@ -2,8 +2,8 @@ import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import NavBar from "./pages/NavBar";
 import HomePage from "./pages/HomePage";
-import AdminLogin from "./pages/AdminLogin";
-import AdminDashboard from "./pages/AdminDashboard";
+import AdminLogin from "./pages/admin/AdminLogin";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 import ProtectedRoute from "./pages/ProtectedRoute";
 // local dev/debug components (optional)
 // import AddProduct from "./Components/Products/AddProduct";

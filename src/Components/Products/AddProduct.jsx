@@ -9,7 +9,7 @@ const AddProduct = () => {
     size: "",
     category: "",
     description: "",
-    coupon: "",
+    stock_status: "In Stock", // new field
   });
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -49,7 +49,7 @@ const AddProduct = () => {
         size: form.size,
         category: form.category,
         description: form.description,
-        coupon: form.coupon,
+        stock_status: form.stock_status, // new field
         image_url: imagePath,
       },
     ]);
@@ -64,7 +64,7 @@ const AddProduct = () => {
         size: "",
         category: "",
         description: "",
-        coupon: "",
+        stock_status: "In Stock",
       });
       setImage(null);
     }
@@ -94,7 +94,7 @@ const AddProduct = () => {
           className="w-full border p-2 rounded"
         />
 
-        {/* Size (Styled Radio Buttons) */}
+        {/* Size */}
         <div>
           <label className="block text-gray-700 font-medium mb-2">
             Select Size:
@@ -107,9 +107,7 @@ const AddProduct = () => {
                   name="size"
                   value={size}
                   checked={form.size === size}
-                  onChange={(e) =>
-                    setForm({ ...form, size: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, size: e.target.value })}
                   className="hidden peer"
                 />
                 <div
@@ -127,9 +125,11 @@ const AddProduct = () => {
           </div>
         </div>
 
-        {/* Category Dropdown */}
+        {/* Category */}
         <div>
-          <label className="block text-gray-700 font-medium mb-2">Category:</label>
+          <label className="block text-gray-700 font-medium mb-2">
+            Category:
+          </label>
           <select
             required
             value={form.category}
@@ -147,20 +147,33 @@ const AddProduct = () => {
         {/* Description */}
         <textarea
           value={form.description}
-          onChange={(e) =>
-            setForm({ ...form, description: e.target.value })
-          }
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
           placeholder="Description"
           className="w-full border p-2 rounded"
         />
 
-        {/* Coupon */}
-        <input
-          value={form.coupon}
-          onChange={(e) => setForm({ ...form, coupon: e.target.value })}
-          placeholder="Coupon code (optional)"
-          className="w-full border p-2 rounded"
-        />
+        {/* Stock Status */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">
+            Stock Status:
+          </label>
+          <div className="flex gap-4">
+            {["In Stock", "Out of Stock"].map((status) => (
+              <label key={status} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="stock_status"
+                  value={status}
+                  checked={form.stock_status === status}
+                  onChange={(e) =>
+                    setForm({ ...form, stock_status: e.target.value })
+                  }
+                />
+                <span>{status}</span>
+              </label>
+            ))}
+          </div>
+        </div>
 
         {/* Image Upload */}
         <input
