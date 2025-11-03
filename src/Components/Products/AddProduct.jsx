@@ -5,17 +5,19 @@ import { supabase } from "../../supabaseClient";
 const AddProduct = () => {
   const [form, setForm] = useState({
     name: "",
-    price: "",
+    offer_quantity: "",
+    offer_price: "",
     size: "",
     category: "",
     description: "",
-    stock_status: "In Stock", // new field
+    stock_status: "In Stock",
   });
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!image) {
       alert("Please choose an image");
       return;
@@ -30,43 +32,58 @@ const AddProduct = () => {
     }
 
     setLoading(true);
-    const fileName = `${Date.now()}_${image.name}`;
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("outfit_images")
-      .upload(fileName, image);
 
-    if (uploadError) {
-      alert(uploadError.message);
-      setLoading(false);
-      return;
-    }
+    try {
+      // Upload image to Supabase Storage
+      const fileName = `${Date.now()}_${image.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("outfit_images")
+        .upload(fileName, image);
 
-    const imagePath = uploadData.path;
-    const { error } = await supabase.from("products").insert([
-      {
-        name: form.name,
-        price: form.price,
-        size: form.size,
-        category: form.category,
-        description: form.description,
-        stock_status: form.stock_status, // new field
-        image_url: imagePath,
-      },
-    ]);
+      if (uploadError) throw uploadError;
 
-    setLoading(false);
-    if (error) alert(error.message);
-    else {
-      alert("✅ Product added successfully!");
+      // Get public URL of uploaded image
+      const { publicUrl, error: urlError } = supabase
+        .storage
+        .from("outfit_images")
+        .getPublicUrl(fileName);
+
+      if (urlError) throw urlError;
+
+      // Insert product into database
+      const { error } = await supabase.from("products").insert([
+        {
+          name: form.name,
+          quantity: form.offer_quantity, // DB column is 'quantity'
+          offer_price: form.offer_price,
+          size: form.size,
+          category: form.category,
+          description: form.description,
+          stock_status: form.stock_status,
+          image_url: publicUrl, // store public URL
+        },
+      ]);
+
+      if (error) throw error;
+
+      // Reset form
       setForm({
         name: "",
-        price: "",
+        offer_quantity: "",
+        offer_price: "",
         size: "",
         category: "",
         description: "",
         stock_status: "In Stock",
       });
       setImage(null);
+
+      alert("✅ Product added successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("❌ Error adding product: " + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -84,21 +101,35 @@ const AddProduct = () => {
           className="w-full border p-2 rounded"
         />
 
-        {/* Price */}
-        <input
-          required
-          value={form.price}
-          onChange={(e) => setForm({ ...form, price: e.target.value })}
-          type="number"
-          placeholder="Price"
-          className="w-full border p-2 rounded"
-        />
+        {/* Offer Section */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">Offer Details:</label>
+          <div className="flex gap-3">
+            <input
+              required
+              type="number"
+              min="1"
+              value={form.offer_quantity}
+              onChange={(e) => setForm({ ...form, offer_quantity: e.target.value })}
+              placeholder="Quantity (e.g. 2)"
+              className="w-1/2 border p-2 rounded"
+            />
+            <input
+              required
+              type="number"
+              min="0"
+              value={form.offer_price}
+              onChange={(e) => setForm({ ...form, offer_price: e.target.value })}
+              placeholder="Offer Price (e.g. 1000)"
+              className="w-1/2 border p-2 rounded"
+            />
+          </div>
+          <p className="text-sm text-gray-500 mt-1">Example: 2 shirts for ₹1000</p>
+        </div>
 
         {/* Size */}
         <div>
-          <label className="block text-gray-700 font-medium mb-2">
-            Select Size:
-          </label>
+          <label className="block text-gray-700 font-medium mb-2">Select Size:</label>
           <div className="flex flex-wrap gap-2">
             {["S", "M", "L", "XL", "XXL"].map((size) => (
               <label key={size} className="cursor-pointer">
@@ -111,8 +142,7 @@ const AddProduct = () => {
                   className="hidden peer"
                 />
                 <div
-                  className={`px-3 py-1.5 rounded-lg border-2 text-base font-medium transition
-                  ${
+                  className={`px-3 py-1.5 rounded-lg border-2 text-base font-medium transition ${
                     form.size === size
                       ? "bg-amber-500 text-white border-amber-500"
                       : "bg-white text-gray-700 border-gray-300 hover:bg-amber-100"
@@ -127,9 +157,7 @@ const AddProduct = () => {
 
         {/* Category */}
         <div>
-          <label className="block text-gray-700 font-medium mb-2">
-            Category:
-          </label>
+          <label className="block text-gray-700 font-medium mb-2">Category:</label>
           <select
             required
             value={form.category}
@@ -154,9 +182,7 @@ const AddProduct = () => {
 
         {/* Stock Status */}
         <div>
-          <label className="block text-gray-700 font-medium mb-2">
-            Stock Status:
-          </label>
+          <label className="block text-gray-700 font-medium mb-2">Stock Status:</label>
           <div className="flex gap-4">
             {["In Stock", "Out of Stock"].map((status) => (
               <label key={status} className="flex items-center gap-2 cursor-pointer">
@@ -165,9 +191,7 @@ const AddProduct = () => {
                   name="stock_status"
                   value={status}
                   checked={form.stock_status === status}
-                  onChange={(e) =>
-                    setForm({ ...form, stock_status: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, stock_status: e.target.value })}
                 />
                 <span>{status}</span>
               </label>
