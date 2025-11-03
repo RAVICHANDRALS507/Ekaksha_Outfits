@@ -12,20 +12,21 @@ const NavBar = () => {
     { name: "Products", to: "/admin/products" },
     { name: "Orders", to: "/admin/orders" },
     { name: "Categories", to: "/admin/categories" },
-    { name: "Inventory", to: "/admin/inventory" },
-    { name: "Offers", to: "/admin/offers" },
+    // { name: "Inventory", to: "/admin/inventory" },
+    // { name: "Offers", to: "/admin/offers" },
     { name: "Settings", to: "/admin/settings" },
   ];
 
+  // Load admin session and handle storage changes
   useEffect(() => {
-    const updateAdminSession = () => {
-      const adminSession = localStorage.getItem("adminSession");
-      if (adminSession) {
+    const loadAdminSession = () => {
+      const session = localStorage.getItem("adminSession");
+      if (session) {
         try {
-          const sessionData = JSON.parse(adminSession);
-          setAdminEmail(sessionData.email || null);
+          const data = JSON.parse(session);
+          setAdminEmail(data.email || null);
         } catch (e) {
-          console.error("Invalid adminSession data:", e);
+          console.error("Invalid adminSession:", e);
           setAdminEmail(null);
         }
       } else {
@@ -33,21 +34,34 @@ const NavBar = () => {
       }
     };
 
+    loadAdminSession();
+
+    const handleStorageChange = (e) => {
+      if (e.key === "adminSession") {
+        loadAdminSession();
+      }
+    };
+
+    // handle same-tab updates (custom event)
+    const handleAdminSessionChanged = () => loadAdminSession();
+
     const handleResize = () => setIsMobile(window.innerWidth < 850);
 
-    updateAdminSession();
-    window.addEventListener("adminSessionChanged", updateAdminSession);
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("adminSessionChanged", handleAdminSessionChanged);
     window.addEventListener("resize", handleResize);
 
     return () => {
-      window.removeEventListener("adminSessionChanged", updateAdminSession);
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("adminSessionChanged", handleAdminSessionChanged);
       window.removeEventListener("resize", handleResize);
     };
   }, []);
 
+  // Logout handler
   const handleLogout = () => {
     localStorage.removeItem("adminSession");
-    setAdminEmail(null);
+    // notify same-tab listeners (NavBar)
     window.dispatchEvent(new Event("adminSessionChanged"));
     navigate("/");
   };
@@ -60,7 +74,7 @@ const NavBar = () => {
           Ekaksha <span className="text-white">Outfits</span>
         </Link>
 
-        {/* Desktop Menu (only when admin is NOT logged in) */}
+        {/* Desktop Menu */}
         {!adminEmail && (
           <ul className="hidden md:flex space-x-8 text-lg font-medium">
             <li>
@@ -87,10 +101,10 @@ const NavBar = () => {
         )}
 
         {/* Admin Section */}
-        {/* <div className="flex items-center space-x-4">
+        <div className="hidden md:flex items-center space-x-4">
           {adminEmail ? (
             <>
-              <span className="text-gray-800 font-medium hidden md:inline">👤 {adminEmail}</span>
+              <span className="text-gray-800 font-medium">👤 {adminEmail}</span>
               <button
                 onClick={handleLogout}
                 className="bg-red-500 text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-red-600 transition duration-300"
@@ -106,7 +120,7 @@ const NavBar = () => {
               Admin Login
             </Link>
           )}
-        </div> */}
+        </div>
 
         {/* Mobile Menu Button */}
         <button
@@ -130,19 +144,48 @@ const NavBar = () => {
         <div className="md:hidden bg-amber-200 shadow-md">
           <ul className="flex flex-col items-center space-y-4 py-4 text-lg font-medium">
             {!adminEmail && (
-              <li>
-                <Link
-                  to="/admin-login"
-                  className="bg-white text-gray-800 font-semibold px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition duration-300"
-                >
-                  Admin Login
-                </Link>
-              </li>
+              <>
+                <li>
+                  <Link
+                    to="/admin-login"
+                    className="bg-white text-gray-800 font-semibold px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition duration-300"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Admin Login
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/shop"
+                    className="text-gray-800 hover:text-white transition duration-300"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Shop
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/about"
+                    className="text-gray-800 hover:text-white transition duration-300"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    About
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/contact"
+                    className="text-gray-800 hover:text-white transition duration-300"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Contact
+                  </Link>
+                </li>
+              </>
             )}
 
             {adminEmail && isMobile && (
               <>
-                {/* Admin menu links for mobile < 850px */}
                 {adminMenu.map((item) => (
                   <li key={item.name}>
                     <Link
@@ -154,10 +197,12 @@ const NavBar = () => {
                     </Link>
                   </li>
                 ))}
-                {/* Logout button */}
                 <li>
                   <button
-                    onClick={handleLogout}
+                    onClick={() => {
+                      handleLogout();
+                      setMenuOpen(false);
+                    }}
                     className="bg-red-500 text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-red-600 transition duration-300"
                   >
                     Logout

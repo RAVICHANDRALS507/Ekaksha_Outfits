@@ -15,8 +15,8 @@ const Sidebar = () => {
     { name: "Products", to: "/admin/products" },
     { name: "Orders", to: "/admin/orders" },
     { name: "Categories", to: "/admin/categories" },
-    { name: "Inventory", to: "/admin/inventory" },
-    { name: "Offers", to: "/admin/offers" },
+    // { name: "Inventory", to: "/admin/inventory" },
+    // { name: "Offers", to: "/admin/offers" },
     { name: "Settings", to: "/admin/settings" },
   ];
 

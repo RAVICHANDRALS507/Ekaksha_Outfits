@@ -12,10 +12,10 @@ const ProductsPage = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <ProductList />
+          <AddProduct />
         </div>
         <div>
-          <AddProduct />
+          <ProductList />
         </div>
       </div>
     </div>

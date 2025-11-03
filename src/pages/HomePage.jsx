@@ -4,49 +4,73 @@ import { supabase } from "../supabaseClient";
 const HomePage = () => {
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState(["All"]);
   const [activeCategory, setActiveCategory] = useState("All");
   const [loading, setLoading] = useState(true);
 
-  // Mobile filter popup states
+  // Mobile filter popup
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedPriceRanges, setSelectedPriceRanges] = useState([]);
 
   // Predefined price ranges
   const priceRanges = [
-    { label: "₹0 - ₹999", min: 0, max: 999 },
-    { label: "₹1000 - ₹1999", min: 1000, max: 1999 },
-    { label: "₹2000 - ₹4999", min: 2000, max: 4999 },
-    { label: "₹5000+", min: 5000, max: Infinity },
+    { label: "₹0 - ₹499", min: 0, max: 499 },
+    { label: "₹500 - ₹999", min: 500, max: 999 },
+    { label: "₹1000 - ₹1499", min: 1000, max: 1499 },
+    { label: "₹1500 - ₹1999", min: 1500, max: 1999 },
+    // { label: "₹2000+", min: 2000, max: Infinity },
   ];
 
-  // Fetch products from Supabase
-  useEffect(() => {
-    const fetchProducts = async () => {
-      const { data, error } = await supabase.from("products").select("*");
-      if (error) {
-        console.error("Error fetching products:", error.message);
-      } else {
-        setProducts(data || []);
-        setFilteredProducts(data || []);
+  // Fetch products
+  const fetchProducts = async () => {
+    const { data, error } = await supabase.from("products").select("*");
+    if (error) {
+      console.error("Error fetching products:", error.message);
+      return;
+    }
+    setProducts(data || []);
+    setFilteredProducts(data || []);
+  };
 
-        // Extract unique categories
-        const uniqueCategories = ["All", ...new Set(data.map((item) => item.category))];
-        setCategories(uniqueCategories);
-      }
+  // Fetch categories from Supabase
+  const fetchCategories = async () => {
+    const { data, error } = await supabase.from("categories").select("*");
+    if (error) {
+      console.error("Error fetching categories:", error.message);
+      return;
+    }
+
+    // Assuming your table has a `name` column
+    const categoryList = data?.map((c) => c.name) || [];
+    setCategories(["All", ...categoryList]);
+  };
+
+  // Initial fetch
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([fetchProducts(), fetchCategories()]);
       setLoading(false);
     };
-
-    fetchProducts();
+    loadData();
   }, []);
 
-  // Apply category and price filters
+  // Filter logic
   useEffect(() => {
     let filtered = [...products];
 
     // Category filter
     if (activeCategory !== "All") {
-      filtered = filtered.filter((p) => p.category === activeCategory);
+      filtered = filtered.filter((p) => {
+        if (!p.categories) return false;
+
+        // Handle both array type and comma-separated string
+        const productCategories = Array.isArray(p.categories)
+          ? p.categories
+          : p.categories.split(",").map((c) => c.trim());
+
+        return productCategories.includes(activeCategory);
+      });
     }
 
     // Price range filter
@@ -71,7 +95,6 @@ const HomePage = () => {
     );
   };
 
-  // Clear filters handler
   const clearFilters = () => {
     setActiveCategory("All");
     setSelectedPriceRanges([]);
@@ -80,7 +103,9 @@ const HomePage = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <p className="text-lg text-gray-700 animate-pulse">Loading outfits...</p>
+        <p className="text-lg text-gray-700 animate-pulse">
+          Loading outfits...
+        </p>
       </div>
     );
   }
@@ -131,17 +156,17 @@ const HomePage = () => {
 
       {/* Mobile Filter Popup */}
       {isFilterOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-end z-50">
-          <div className="bg-white w-3/4 max-w-sm h-full p-5 shadow-lg overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Filters</h2>
-              <button
-                onClick={() => setIsFilterOpen(false)}
-                className="text-gray-600 text-xl font-bold"
-              >
-                ✕
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white w-11/12 max-w-sm max-h-[80vh] rounded-xl p-5 shadow-xl overflow-y-auto relative">
+            {/* Close button */}
+            <button
+              onClick={() => setIsFilterOpen(false)}
+              className="absolute top-3 right-3 text-gray-600 text-2xl font-bold hover:text-gray-800"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-xl font-semibold mb-4">Filters</h2>
 
             {/* Category Filter */}
             <div className="mb-6">
@@ -202,14 +227,19 @@ const HomePage = () => {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredProducts.map((product) => {
-            // Safely get public URL, fallback if missing
-            let imageUrl = "/placeholder.png"; // fallback
+            // Use direct image URL if available, otherwise try Supabase Storage, else fallback
+            let imageUrl = "/placeholder.png";
+
             if (product.image_url) {
-              const { data } = supabase.storage
-                .from("outfit_images")
-                .getPublicUrl(product.image_url);
-              if (data?.publicUrl) {
-                imageUrl = data.publicUrl;
+              if (product.image_url.startsWith("http")) {
+                imageUrl = product.image_url;
+              } else {
+                const { data } = supabase.storage
+                  .from("outfit_images")
+                  .getPublicUrl(product.image_url);
+                if (data?.publicUrl) {
+                  imageUrl = data.publicUrl;
+                }
               }
             }
 
@@ -218,37 +248,41 @@ const HomePage = () => {
                 key={product.id}
                 className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition duration-300"
               >
-                {/* Image */}
                 <img
                   src={imageUrl}
                   alt={product.name}
                   className="w-full h-56 object-cover"
                 />
 
-                {/* Product Info */}
                 <div className="p-4 space-y-2">
-                  <h2 className="text-lg font-semibold text-gray-800">{product.name}</h2>
-
-                  <div className="text-sm text-gray-700">
-                    <p>
-                      <span className="font-semibold text-gray-800">Offer:</span>{" "}
-                      {product.quantity
-                        ? `${product.quantity} items for ₹${product.offer_price}`
-                        : "No active offer"}
-                    </p>
-                  </div>
+                  <h2 className="text-lg font-semibold text-gray-800">
+                    {product.name}
+                  </h2>
 
                   <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Available Size:</span> {product.size}
+                    <span className="font-semibold text-gray-800">Offer:</span>{" "}
+                    {product.quantity
+                      ? `${product.quantity} items for ₹${product.offer_price}`
+                      : "No active offer"}
                   </p>
 
                   <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Category:</span> {product.category}
+                    <span className="font-semibold">Size:</span>{" "}
+                    <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
+                      {product.size}
+                    </span>
+                  </p>
+
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold">Category:</span>{" "}
+                    {product.categories}
                   </p>
 
                   <p
                     className={`text-sm font-semibold ${
-                      product.stock_status === "In Stock" ? "text-green-600" : "text-red-600"
+                      product.stock_status === "In Stock"
+                        ? "text-green-600"
+                        : "text-red-600"
                     }`}
                   >
                     {product.stock_status}
@@ -258,7 +292,9 @@ const HomePage = () => {
                     {product.description || "No description available."}
                   </p>
 
-                  <p className="text-lg font-bold text-amber-600">₹{product.offer_price}</p>
+                  <p className="text-lg font-bold text-amber-600">
+                    ₹{product.offer_price}
+                  </p>
 
                   <div className="mt-3 flex flex-col sm:flex-row gap-2">
                     <button className="flex-1 bg-gray-200 text-gray-800 text-sm py-2 rounded-lg hover:bg-gray-300 transition duration-300">

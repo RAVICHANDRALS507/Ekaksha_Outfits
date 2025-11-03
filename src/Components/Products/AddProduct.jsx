@@ -1,5 +1,5 @@
 // src/components/Products/AddProduct.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
 
 const AddProduct = () => {
@@ -7,13 +7,32 @@ const AddProduct = () => {
     name: "",
     offer_quantity: "",
     offer_price: "",
-    size: "",
-    category: "",
+    size: [],
+    categories: [],
     description: "",
     stock_status: "In Stock",
   });
+  const [categoriesList, setCategoriesList] = useState([]);
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Fetch categories from Supabase
+  const fetchCategories = async () => {
+    const { data, error } = await supabase
+      .from("categories")
+      .select("*")
+      .order("id", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching categories:", error);
+    } else {
+      setCategoriesList(data);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,12 +41,12 @@ const AddProduct = () => {
       alert("Please choose an image");
       return;
     }
-    if (!form.size) {
-      alert("Please select a size");
+    if (form.size.length === 0) {
+      alert("Please select at least one size");
       return;
     }
-    if (!form.category) {
-      alert("Please select a category");
+    if (form.categories.length === 0) {
+      alert("Please select at least one category");
       return;
     }
 
@@ -36,31 +55,32 @@ const AddProduct = () => {
     try {
       // Upload image to Supabase Storage
       const fileName = `${Date.now()}_${image.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("outfit_images")
         .upload(fileName, image);
 
       if (uploadError) throw uploadError;
 
       // Get public URL of uploaded image
-      const { publicUrl, error: urlError } = supabase
+      const { data: urlData, error: urlError } = supabase
         .storage
         .from("outfit_images")
         .getPublicUrl(fileName);
 
       if (urlError) throw urlError;
+      const publicUrl = urlData.publicUrl;
 
       // Insert product into database
       const { error } = await supabase.from("products").insert([
         {
           name: form.name,
-          quantity: form.offer_quantity, // DB column is 'quantity'
+          quantity: form.offer_quantity,
           offer_price: form.offer_price,
-          size: form.size,
-          category: form.category,
+          size: form.size.join(","), // comma-separated sizes
+          categories: form.categories.join(","), // comma-separated categories
           description: form.description,
           stock_status: form.stock_status,
-          image_url: publicUrl, // store public URL
+          image_url: publicUrl,
         },
       ]);
 
@@ -71,8 +91,8 @@ const AddProduct = () => {
         name: "",
         offer_quantity: "",
         offer_price: "",
-        size: "",
-        category: "",
+        size: [],
+        categories: [],
         description: "",
         stock_status: "In Stock",
       });
@@ -127,49 +147,76 @@ const AddProduct = () => {
           <p className="text-sm text-gray-500 mt-1">Example: 2 shirts for ₹1000</p>
         </div>
 
-        {/* Size */}
+        {/* Size (multi-select) */}
         <div>
-          <label className="block text-gray-700 font-medium mb-2">Select Size:</label>
+          <label className="block text-gray-700 font-medium mb-2">Select Sizes:</label>
           <div className="flex flex-wrap gap-2">
-            {["S", "M", "L", "XL", "XXL"].map((size) => (
-              <label key={size} className="cursor-pointer">
+            {["S", "M", "L", "XL", "XXL"].map((sizeOption) => (
+              <label key={sizeOption} className="cursor-pointer">
                 <input
-                  type="radio"
-                  name="size"
-                  value={size}
-                  checked={form.size === size}
-                  onChange={(e) => setForm({ ...form, size: e.target.value })}
+                  type="checkbox"
+                  value={sizeOption}
+                  checked={form.size.includes(sizeOption)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setForm((prevForm) => {
+                      if (prevForm.size.includes(value)) {
+                        return { ...prevForm, size: prevForm.size.filter((s) => s !== value) };
+                      } else {
+                        return { ...prevForm, size: [...prevForm.size, value] };
+                      }
+                    });
+                  }}
                   className="hidden peer"
                 />
                 <div
                   className={`px-3 py-1.5 rounded-lg border-2 text-base font-medium transition ${
-                    form.size === size
+                    form.size.includes(sizeOption)
                       ? "bg-amber-500 text-white border-amber-500"
                       : "bg-white text-gray-700 border-gray-300 hover:bg-amber-100"
                   }`}
                 >
-                  {size}
+                  {sizeOption}
                 </div>
               </label>
             ))}
           </div>
         </div>
 
-        {/* Category */}
+        {/* Categories (multi-select checkboxes) */}
         <div>
-          <label className="block text-gray-700 font-medium mb-2">Category:</label>
-          <select
-            required
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
-            className="w-full border p-2 rounded"
-          >
-            <option value="">Select Category</option>
-            <option value="Men">Men</option>
-            <option value="Women">Women</option>
-            <option value="Kids">Kids</option>
-            <option value="Accessories">Accessories</option>
-          </select>
+          <label className="block text-gray-700 font-medium mb-2">Select Categories:</label>
+          <div className="flex flex-wrap gap-2">
+            {categoriesList.map((cat) => (
+              <label key={cat.id} className="cursor-pointer">
+                <input
+                  type="checkbox"
+                  value={cat.name}
+                  checked={form.categories.includes(cat.name)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setForm((prevForm) => {
+                      if (prevForm.categories.includes(value)) {
+                        return { ...prevForm, categories: prevForm.categories.filter((c) => c !== value) };
+                      } else {
+                        return { ...prevForm, categories: [...prevForm.categories, value] };
+                      }
+                    });
+                  }}
+                  className="hidden peer"
+                />
+                <div
+                  className={`px-3 py-1.5 rounded-lg border-2 text-base font-medium transition ${
+                    form.categories.includes(cat.name)
+                      ? "bg-amber-500 text-white border-amber-500"
+                      : "bg-white text-gray-700 border-gray-300 hover:bg-amber-100"
+                  }`}
+                >
+                  {cat.name}
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* Description */}
@@ -200,11 +247,32 @@ const AddProduct = () => {
         </div>
 
         {/* Image Upload */}
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => setImage(e.target.files[0])}
-        />
+        <div className="flex flex-col gap-2">
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setImage(e.target.files[0])}
+          />
+          {image && (
+            <div className="flex items-center gap-4 mt-2">
+              <img
+                src={URL.createObjectURL(image)}
+                alt="preview"
+                className="w-20 h-20 object-cover rounded"
+              />
+              <div className="flex flex-col">
+                <span className="text-sm">{image.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setImage(null)}
+                  className="text-red-500 hover:underline text-sm mt-1"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Submit Button */}
         <button
