@@ -1,9 +1,11 @@
 // src/pages/AdminLogin.jsx
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import { supabase } from "../../supabaseClient";
 import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../../context/AuthContext.jsx"; // ✅ Import context
 
 const AdminLogin = () => {
+  const { login } = useContext(AuthContext); // ✅ get login() from context
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -14,11 +16,12 @@ const AdminLogin = () => {
     setErrorMsg("");
 
     try {
+      // ✅ Query Supabase for admin credentials
       const { data, error } = await supabase
         .from("admins")
         .select("id, email, role")
         .eq("email", email)
-        .eq("password", password) // NOTE: plain-text for now, plan to hash
+        .eq("password", password) // ⚠️ Only for dev; hash later for security
         .single();
 
       if (error || !data) {
@@ -26,12 +29,13 @@ const AdminLogin = () => {
         return;
       }
 
-      // Save minimal session info
-      localStorage.setItem("adminSession", JSON.stringify(data));
-      navigate("/admin");
+      // ✅ Store minimal session info both in state and localStorage
+      const sessionData = JSON.stringify(data);
+      login(sessionData); // 🔥 triggers React re-render immediately (context)
+      navigate("/admin"); // redirect instantly after login
     } catch (err) {
       console.error(err);
-      setErrorMsg("Something went wrong");
+      setErrorMsg("Something went wrong. Please try again later.");
     }
   };
 
@@ -40,7 +44,8 @@ const AdminLogin = () => {
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <h2 className="text-3xl font-bold text-center mb-2">Admin Login</h2>
         <p className="text-center text-gray-600 mb-6">
-          Manage <span className="font-semibold text-amber-500">Men’s</span> &{" "}
+          Manage{" "}
+          <span className="font-semibold text-amber-500">Men’s</span> &{" "}
           <span className="font-semibold text-amber-500">Women’s</span> Outfits
         </p>
 
@@ -49,7 +54,7 @@ const AdminLogin = () => {
             <label className="block text-gray-700 mb-1">Email</label>
             <input
               type="email"
-              className="w-full border rounded-lg px-4 py-2"
+              className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-400 focus:outline-none"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -60,16 +65,21 @@ const AdminLogin = () => {
             <label className="block text-gray-700 mb-1">Password</label>
             <input
               type="password"
-              className="w-full border rounded-lg px-4 py-2"
+              className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-400 focus:outline-none"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>
 
-          {errorMsg && <p className="text-red-500 text-center">{errorMsg}</p>}
+          {errorMsg && (
+            <p className="text-red-500 text-center font-medium">{errorMsg}</p>
+          )}
 
-          <button className="w-full bg-amber-400 hover:bg-amber-500 text-white py-2 rounded-lg">
+          <button
+            type="submit"
+            className="w-full bg-amber-400 hover:bg-amber-500 text-white py-2 rounded-lg transition duration-300"
+          >
             Login
           </button>
         </form>

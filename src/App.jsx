@@ -8,14 +8,18 @@ import ProtectedRoute from "./pages/ProtectedRoute";
 // local dev/debug components (optional)
 // import AddProduct from "./Components/Products/AddProduct";
 import OrdersPage from "./pages/admin/OrdersPage";
+import CartPage from "./pages/admin/CartPage";
 
 const App = () => {
   return (
     <>
       <NavBar />
-      <div className="pt-16"> {/* offset for top nav if fixed */}
+      <div className="pt-16">
+        {" "}
+        {/* offset for top nav if fixed */}
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/cart" element={<CartPage />} />
           <Route path="/admin-login" element={<AdminLogin />} />
 
           {/* Protected admin routes */}

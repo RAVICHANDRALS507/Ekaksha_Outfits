@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
+import { useNavigate } from "react-router-dom";
 
 const HomePage = () => {
   const [products, setProducts] = useState([]);
@@ -12,16 +13,21 @@ const HomePage = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedPriceRanges, setSelectedPriceRanges] = useState([]);
 
-  // Predefined price ranges
+  // --- NEW STATE FOR LIGHTBOX ---
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [currentProductIndex, setCurrentProductIndex] = useState(0);
+  // ------------------------------
+
+  const navigate = useNavigate();
+
   const priceRanges = [
     { label: "₹0 - ₹499", min: 0, max: 499 },
     { label: "₹500 - ₹999", min: 500, max: 999 },
     { label: "₹1000 - ₹1499", min: 1000, max: 1499 },
     { label: "₹1500 - ₹1999", min: 1500, max: 1999 },
-    // { label: "₹2000+", min: 2000, max: Infinity },
   ];
 
-  // Fetch products
+  // Fetch products (unchanged)
   const fetchProducts = async () => {
     const { data, error } = await supabase.from("products").select("*");
     if (error) {
@@ -32,20 +38,17 @@ const HomePage = () => {
     setFilteredProducts(data || []);
   };
 
-  // Fetch categories from Supabase
+  // Fetch categories (unchanged)
   const fetchCategories = async () => {
     const { data, error } = await supabase.from("categories").select("*");
     if (error) {
       console.error("Error fetching categories:", error.message);
       return;
     }
-
-    // Assuming your table has a `name` column
     const categoryList = data?.map((c) => c.name) || [];
     setCategories(["All", ...categoryList]);
   };
 
-  // Initial fetch
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -55,25 +58,20 @@ const HomePage = () => {
     loadData();
   }, []);
 
-  // Filter logic
+  // Filtering (unchanged)
   useEffect(() => {
     let filtered = [...products];
 
-    // Category filter
     if (activeCategory !== "All") {
       filtered = filtered.filter((p) => {
         if (!p.categories) return false;
-
-        // Handle both array type and comma-separated string
         const productCategories = Array.isArray(p.categories)
           ? p.categories
           : p.categories.split(",").map((c) => c.trim());
-
         return productCategories.includes(activeCategory);
       });
     }
 
-    // Price range filter
     if (selectedPriceRanges.length > 0) {
       filtered = filtered.filter((p) =>
         selectedPriceRanges.some(
@@ -100,6 +98,69 @@ const HomePage = () => {
     setSelectedPriceRanges([]);
   };
 
+  // Add to Cart (unchanged logic, as it adds one offer/bundle)
+  const addToCart = (product) => {
+    const cart = JSON.parse(localStorage.getItem("cart")) || [];
+
+    const existingIndex = cart.findIndex((item) => item.id === product.id);
+
+    if (existingIndex !== -1) {
+      cart[existingIndex].quantityInCart += 1;
+    } else {
+      cart.push({ ...product, quantityInCart: 1 });
+    }
+
+    localStorage.setItem("cart", JSON.stringify(cart));
+    // notify same-tab listeners (CartPage, cart icons)
+    try {
+      window.dispatchEvent(new Event("cartUpdated"));
+    } catch (e) {
+      // ignore in SSR or restricted contexts
+    }
+
+    alert(`${product.name} added to cart!`);
+  };
+
+  // --- NEW LIGHTBOX HANDLERS ---
+  const openLightbox = (index) => {
+    setCurrentProductIndex(index);
+    setLightboxOpen(true);
+  };
+
+  const closeLightbox = () => {
+    setLightboxOpen(false);
+  };
+
+  const goToPrev = () => {
+    setCurrentProductIndex((prevIndex) =>
+      prevIndex === 0 ? filteredProducts.length - 1 : prevIndex - 1
+    );
+  };
+
+  const goToNext = () => {
+    setCurrentProductIndex((prevIndex) =>
+      prevIndex === filteredProducts.length - 1 ? 0 : prevIndex + 1
+    );
+  };
+  // -----------------------------
+
+  const getImageUrl = (product) => {
+    let imageUrl = "/placeholder.png";
+    if (product.image_url) {
+      if (product.image_url.startsWith("http")) {
+        imageUrl = product.image_url;
+      } else {
+        const { data } = supabase.storage
+          .from("outfit_images")
+          .getPublicUrl(product.image_url);
+        if (data?.publicUrl) {
+          imageUrl = data.publicUrl;
+        }
+      }
+    }
+    return imageUrl;
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -110,14 +171,88 @@ const HomePage = () => {
     );
   }
 
+  // --- LIGHTBOX COMPONENT (Rendered conditionally) ---
+  const Lightbox = () => {
+    if (!filteredProducts.length) return null;
+
+    const product = filteredProducts[currentProductIndex];
+    const imageUrl = getImageUrl(product);
+
+    return (
+      <div
+        className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] p-4"
+        onClick={closeLightbox}
+      >
+        {/* Close button */}
+        <button
+          onClick={closeLightbox}
+          className="absolute top-4 right-4 text-white text-4xl font-light z-10"
+          aria-label="Close image viewer"
+        >
+          &times;
+        </button>
+
+        {/* Previous button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent closing lightbox
+            goToPrev();
+          }}
+          className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white text-5xl bg-black bg-opacity-30 rounded-full p-2 hover:bg-opacity-50 transition z-10 hidden sm:block"
+          aria-label="Previous image"
+        >
+          &lt;
+        </button>
+
+        {/* Next button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent closing lightbox
+            goToNext();
+          }}
+          className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white text-5xl bg-black bg-opacity-30 rounded-full p-2 hover:bg-opacity-50 transition z-10 hidden sm:block"
+          aria-label="Next image"
+        >
+          &gt;
+        </button>
+
+        {/* Image Container with Zoom/Scroll */}
+        <div
+          className="relative max-w-full max-h-full"
+          onClick={(e) => e.stopPropagation()} // Prevent closing when clicking the image area
+        >
+          <img
+            src={imageUrl}
+            alt={product.name}
+            // Tailwind class for zoom/scroll: using transform, cursor, and object-contain
+            className="max-w-full max-h-screen object-contain transition-transform duration-300"
+            style={{
+              // This is the simplest way to allow zoom/pan if the image is larger than the container
+              // For actual robust zoom/pan, a library like 'react-image-magnify' is better,
+              // but these simple classes provide the visual cues you requested.
+              transform: 'scale(1)', // Start scale at 1
+              cursor: 'grab', // Suggests it can be dragged/panned
+              // Note: True zoom/pan requires more complex state management or a dedicated library
+            }}
+          />
+        </div>
+        
+        {/* Product Name overlay */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white bg-black bg-opacity-50 p-2 rounded-lg text-lg sm:text-2xl font-semibold">
+            {product.name}
+        </div>
+      </div>
+    );
+  };
+  // ----------------------------------------------------
+
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-10 relative">
-      {/* Heading */}
       <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8 text-gray-800">
         Explore Our Outfits
       </h1>
 
-      {/* Desktop Clear Filters Button */}
+      {/* ... (Filter and Category buttons are unchanged) ... */}
       <div className="hidden sm:flex justify-center mb-4">
         <button
           onClick={clearFilters}
@@ -127,7 +262,6 @@ const HomePage = () => {
         </button>
       </div>
 
-      {/* Mobile Filter Button */}
       <div className="flex justify-end mb-4 sm:hidden">
         <button
           onClick={() => setIsFilterOpen(true)}
@@ -137,7 +271,6 @@ const HomePage = () => {
         </button>
       </div>
 
-      {/* Desktop Category Filter */}
       <div className="hidden sm:flex flex-wrap justify-center gap-3 sm:gap-4 mb-8">
         {categories.map((category) => (
           <button
@@ -154,21 +287,18 @@ const HomePage = () => {
         ))}
       </div>
 
-      {/* Mobile Filter Popup */}
       {isFilterOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white w-11/12 max-w-sm max-h-[80vh] rounded-xl p-5 shadow-xl overflow-y-auto relative">
-            {/* Close button */}
             <button
               onClick={() => setIsFilterOpen(false)}
               className="absolute top-3 right-3 text-gray-600 text-2xl font-bold hover:text-gray-800"
             >
-              ✕
+              &times;
             </button>
 
             <h2 className="text-xl font-semibold mb-4">Filters</h2>
 
-            {/* Category Filter */}
             <div className="mb-6">
               <h3 className="font-semibold mb-2">Category</h3>
               {categories.map((category) => (
@@ -186,7 +316,6 @@ const HomePage = () => {
               ))}
             </div>
 
-            {/* Price Range Filter */}
             <div>
               <h3 className="font-semibold mb-2">Price Range</h3>
               {priceRanges.map((range) => (
@@ -202,7 +331,6 @@ const HomePage = () => {
               ))}
             </div>
 
-            {/* Buttons: Clear & Apply */}
             <div className="flex gap-2 mt-6">
               <button
                 onClick={clearFilters}
@@ -221,38 +349,26 @@ const HomePage = () => {
         </div>
       )}
 
-      {/* Products Grid */}
       {filteredProducts.length === 0 ? (
         <p className="text-center text-gray-600">No products found.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => {
-            // Use direct image URL if available, otherwise try Supabase Storage, else fallback
-            let imageUrl = "/placeholder.png";
-
-            if (product.image_url) {
-              if (product.image_url.startsWith("http")) {
-                imageUrl = product.image_url;
-              } else {
-                const { data } = supabase.storage
-                  .from("outfit_images")
-                  .getPublicUrl(product.image_url);
-                if (data?.publicUrl) {
-                  imageUrl = data.publicUrl;
-                }
-              }
-            }
+          {filteredProducts.map((product, index) => {
+            const imageUrl = getImageUrl(product);
 
             return (
               <div
                 key={product.id}
                 className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition duration-300"
               >
+                {/* --- CLICK HANDLER ADDED HERE --- */}
                 <img
                   src={imageUrl}
                   alt={product.name}
-                  className="w-full h-56 object-cover"
+                  className="w-full h-56 object-cover cursor-pointer"
+                  onClick={() => openLightbox(index)} // Open lightbox on image click
                 />
+                {/* --------------------------------- */}
 
                 <div className="p-4 space-y-2">
                   <h2 className="text-lg font-semibold text-gray-800">
@@ -297,7 +413,10 @@ const HomePage = () => {
                   </p>
 
                   <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                    <button className="flex-1 bg-gray-200 text-gray-800 text-sm py-2 rounded-lg hover:bg-gray-300 transition duration-300">
+                    <button
+                      onClick={() => addToCart(product)}
+                      className="flex-1 bg-gray-200 text-gray-800 text-sm py-2 rounded-lg hover:bg-gray-300 transition duration-300"
+                    >
                       Add to Cart
                     </button>
                     <button className="flex-1 bg-amber-500 text-white text-sm py-2 rounded-lg hover:bg-amber-600 transition duration-300">
@@ -310,6 +429,17 @@ const HomePage = () => {
           })}
         </div>
       )}
+
+      {/* Render Lightbox when open */}
+      {lightboxOpen && <Lightbox />}
+
+      <button
+        onClick={() => navigate("/cart")}
+        className="sm:hidden fixed bottom-5 right-5 bg-amber-500 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center text-2xl hover:bg-amber-600 transition duration-300 z-50"
+        aria-label="Go to Cart"
+      >
+        🛒
+      </button>
     </div>
   );
 };
