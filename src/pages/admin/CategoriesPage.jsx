@@ -1,27 +1,39 @@
 import React, { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// Initialize Supabase
+// Initialize Supabase client
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
 const CategoriesPage = () => {
+  // CATEGORY STATE
   const [categories, setCategories] = useState([]);
   const [categoryName, setCategoryName] = useState("");
   const [editingCategoryId, setEditingCategoryId] = useState(null);
   const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [loadingCategories, setLoadingCategories] = useState(false);
 
+  // COUPON STATE
   const [coupons, setCoupons] = useState([]);
   const [couponCode, setCouponCode] = useState("");
   const [discount, setDiscount] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
   const [couponDescription, setCouponDescription] = useState("");
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
 
-  const [loadingCategories, setLoadingCategories] = useState(false);
+  // EDITING COUPON
+  const [editingCouponId, setEditingCouponId] = useState(null);
+  const [editingCouponData, setEditingCouponData] = useState({
+    code: "",
+    discount: "",
+    expiry_date: "",
+    description: "",
+  });
 
-  // Fetch categories (manual trigger)
+  // =================== CATEGORY HANDLERS ===================
+
   const fetchCategories = async () => {
     setLoadingCategories(true);
     const { data, error } = await supabase
@@ -29,16 +41,12 @@ const CategoriesPage = () => {
       .select("*")
       .order("id", { ascending: true });
 
-    if (error) {
-      console.error("Error fetching categories:", error);
-      setLoadingCategories(false);
-    } else {
-      setCategories(data);
-      setLoadingCategories(false);
-    }
+    if (error) console.error("Error fetching categories:", error);
+    else setCategories(data);
+
+    setLoadingCategories(false);
   };
 
-  // Add category
   const handleAddCategory = async (e) => {
     e.preventDefault();
     if (!categoryName) return;
@@ -48,27 +56,23 @@ const CategoriesPage = () => {
       .insert([{ name: categoryName }])
       .select();
 
-    if (error) {
-      console.error("Error adding category:", error);
-    } else {
+    if (error) console.error("Error adding category:", error);
+    else {
       setCategories([...categories, data[0]]);
       setCategoryName("");
     }
   };
 
-  // Start editing
-  const startEditing = (category) => {
+  const startEditingCategory = (category) => {
     setEditingCategoryId(category.id);
     setEditingCategoryName(category.name);
   };
 
-  // Cancel editing
-  const cancelEditing = () => {
+  const cancelEditingCategory = () => {
     setEditingCategoryId(null);
     setEditingCategoryName("");
   };
 
-  // Save edited category
   const saveCategory = async (id) => {
     const { data, error } = await supabase
       .from("categories")
@@ -76,231 +80,381 @@ const CategoriesPage = () => {
       .eq("id", id)
       .select();
 
-    if (error) {
-      console.error("Error updating category:", error);
-    } else {
+    if (error) console.error("Error updating category:", error);
+    else {
       setCategories(categories.map((cat) => (cat.id === id ? data[0] : cat)));
-      cancelEditing();
+      cancelEditingCategory();
     }
   };
 
-  // Delete category
   const deleteCategory = async (id) => {
     const { error } = await supabase.from("categories").delete().eq("id", id);
-
-    if (error) {
-      console.error("Error deleting category:", error);
-    } else {
-      setCategories(categories.filter((cat) => cat.id !== id));
-    }
+    if (error) console.error("Error deleting category:", error);
+    else setCategories(categories.filter((cat) => cat.id !== id));
   };
 
-  // Add coupon
-  const handleAddCoupon = (e) => {
+  // =================== COUPON HANDLERS ===================
+
+  const fetchCoupons = async () => {
+    setLoadingCoupons(true);
+    const { data, error } = await supabase
+      .from("coupons")
+      .select("*")
+      .order("id", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching coupons:", error);
+      setLoadingCoupons(false);
+      return;
+    }
+
+    const today = new Date();
+    const updatedCoupons = data.map((coupon) => {
+      const isExpired =
+        coupon.expiry_date && new Date(coupon.expiry_date) < today;
+      return { ...coupon, is_active: !isExpired };
+    });
+
+    setCoupons(updatedCoupons);
+    setLoadingCoupons(false);
+  };
+
+  const handleAddCoupon = async (e) => {
     e.preventDefault();
     if (!couponCode || !discount) return;
 
-    const newCoupon = {
-      id: Date.now(),
-      code: couponCode,
-      discount,
-      expiryDate,
-      description: couponDescription,
-    };
+    const expiry = expiryDate ? new Date(expiryDate) : null;
+    const today = new Date();
 
-    setCoupons([...coupons, newCoupon]);
-    setCouponCode("");
-    setDiscount("");
-    setExpiryDate("");
-    setCouponDescription("");
+    const { data, error } = await supabase
+      .from("coupons")
+      .insert([
+        {
+          code: couponCode,
+          description: couponDescription,
+          discount: parseInt(discount),
+          expiry_date: expiryDate || null,
+          is_active: !expiry || expiry >= today,
+        },
+      ])
+      .select();
+
+    if (error) {
+      console.error("Error adding coupon:", error);
+      alert("Failed to add coupon. Check console for details.");
+    } else {
+      setCoupons([...coupons, data[0]]);
+      setCouponCode("");
+      setDiscount("");
+      setExpiryDate("");
+      setCouponDescription("");
+    }
   };
+
+  const deleteCoupon = async (id) => {
+    const { error } = await supabase.from("coupons").delete().eq("id", id);
+    if (error) console.error("Error deleting coupon:", error);
+    else setCoupons(coupons.filter((c) => c.id !== id));
+  };
+
+  const startEditingCoupon = (coupon) => {
+    setEditingCouponId(coupon.id);
+    setEditingCouponData({
+      code: coupon.code,
+      discount: coupon.discount,
+      expiry_date: coupon.expiry_date,
+      description: coupon.description,
+    });
+  };
+
+  const cancelEditingCoupon = () => {
+    setEditingCouponId(null);
+    setEditingCouponData({
+      code: "",
+      discount: "",
+      expiry_date: "",
+      description: "",
+    });
+  };
+
+  const saveCoupon = async (id) => {
+    const { data, error } = await supabase
+      .from("coupons")
+      .update({
+        code: editingCouponData.code,
+        discount: parseInt(editingCouponData.discount),
+        expiry_date: editingCouponData.expiry_date || null,
+        description: editingCouponData.description,
+      })
+      .eq("id", id)
+      .select();
+
+    if (error) console.error("Error updating coupon:", error);
+    else {
+      setCoupons(coupons.map((c) => (c.id === id ? data[0] : c)));
+      cancelEditingCoupon();
+    }
+  };
+
+  // =================== RENDER ===================
 
   return (
     <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-4">Categories</h1>
+      <h1 className="text-2xl font-semibold mb-4">Categories & Coupons</h1>
       <p className="text-gray-600 mb-8">
         Manage product categories and coupon codes here.
       </p>
 
-      {/* Add Category Section */}
+      {/* ---------------------- CATEGORY SECTION ---------------------- */}
       <div className="bg-white p-6 rounded-lg shadow mb-8">
-        <h2 className="text-xl font-semibold mb-4">Create New Category</h2>
+        <h2 className="text-xl font-semibold mb-4">Manage Categories</h2>
+
         <form onSubmit={handleAddCategory} className="space-y-4">
-          <div>
-            <label className="block text-gray-700 font-medium mb-1">
-              Category Name
-            </label>
-            <input
-              type="text"
-              value={categoryName}
-              onChange={(e) => setCategoryName(e.target.value)}
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="Enter category name"
-              required
-            />
+          <input
+            type="text"
+            value={categoryName}
+            onChange={(e) => setCategoryName(e.target.value)}
+            className="w-full border border-gray-300 rounded-md p-2"
+            placeholder="Enter category name"
+            required
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex-1"
+            >
+              Add Category
+            </button>
+            <button
+              type="button"
+              onClick={fetchCategories}
+              className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 flex-1"
+            >
+              {loadingCategories ? "Loading..." : "Fetch Categories"}
+            </button>
           </div>
-
-          <div className="flex flex-row justify-between gap-2 w-full">
-  <button
-    type="submit"
-    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex-1 text-center"
-  >
-    Add Category
-  </button>
-
-  <button
-    type="button"
-    onClick={fetchCategories}
-    className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 flex-1 text-center"
-  >
-    {loadingCategories ? "Loading..." : "Fetch Categories"}
-  </button>
-</div>
-
         </form>
 
-        {/* Display Categories (after clicking fetch) */}
-{/* Display Categories (after clicking fetch) */}
-{categories.length > 0 && (
-  <div className="mt-6">
-    <h3 className="font-semibold mb-2">Category List:</h3>
-    <ul className="space-y-2 text-gray-700">
-      {categories.map((cat) => (
-        <li
-          key={cat.id}
-          className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-md border border-gray-200"
-        >
-          {editingCategoryId === cat.id ? (
-            <div className="flex items-center gap-2 w-full">
-              <input
-                type="text"
-                value={editingCategoryName}
-                onChange={(e) => setEditingCategoryName(e.target.value)}
-                className="border border-gray-300 rounded-md p-1 flex-1"
-              />
-              <button
-                onClick={() => saveCategory(cat.id)}
-                className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
+        {categories.length > 0 && (
+          <ul className="mt-6 space-y-2 text-gray-700">
+            {categories.map((cat) => (
+              <li
+                key={cat.id}
+                className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-md border border-gray-200"
               >
-                Save
-              </button>
-              <button
-                onClick={cancelEditing}
-                className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 text-sm"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <>
-              <span className="font-medium">{cat.name}</span>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => startEditing(cat)}
-                  className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-sm"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => deleteCategory(cat.id)}
-                  className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm"
-                >
-                  Delete
-                </button>
-              </div>
-            </>
-          )}
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
-
+                {editingCategoryId === cat.id ? (
+                  <div className="flex items-center gap-2 w-full">
+                    <input
+                      type="text"
+                      value={editingCategoryName}
+                      onChange={(e) => setEditingCategoryName(e.target.value)}
+                      className="border border-gray-300 rounded-md p-1 flex-1"
+                    />
+                    <button
+                      onClick={() => saveCategory(cat.id)}
+                      className="bg-green-600 text-white px-3 py-1 rounded text-sm"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={cancelEditingCategory}
+                      className="bg-gray-400 text-white px-3 py-1 rounded text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="font-medium">{cat.name}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => startEditingCategory(cat)}
+                        className="bg-yellow-500 text-white px-3 py-1 rounded text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteCategory(cat.id)}
+                        className="bg-red-600 text-white px-3 py-1 rounded text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      {/* Coupon Code Section */}
+      {/* ---------------------- COUPON SECTION ---------------------- */}
       <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">Add Coupon Code</h2>
+        <h2 className="text-xl font-semibold mb-4">Manage Coupons</h2>
+
         <form onSubmit={handleAddCoupon} className="space-y-4">
-          <div>
-            <label className="block text-gray-700 font-medium mb-1">
-              Coupon Code
-            </label>
-            <input
-              type="text"
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value)}
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="Enter coupon code"
-              required
-            />
-          </div>
+          <input
+            type="text"
+            value={couponCode}
+            onChange={(e) => setCouponCode(e.target.value)}
+            className="w-full border border-gray-300 rounded-md p-2"
+            placeholder="Enter coupon code"
+            required
+          />
+          <textarea
+            value={couponDescription}
+            onChange={(e) => setCouponDescription(e.target.value)}
+            className="w-full border border-gray-300 rounded-md p-2"
+            placeholder="Enter coupon description"
+            rows="2"
+          />
+          <input
+            type="number"
+            value={discount}
+            onChange={(e) => setDiscount(e.target.value)}
+            className="w-full border border-gray-300 rounded-md p-2"
+            placeholder="Discount (%)"
+            required
+          />
+          <input
+            type="date"
+            value={expiryDate}
+            onChange={(e) => setExpiryDate(e.target.value)}
+            className="w-full border border-gray-300 rounded-md p-2"
+          />
 
-          <div>
-            <label className="block text-gray-700 font-medium mb-1">
-              Description
-            </label>
-            <textarea
-              value={couponDescription}
-              onChange={(e) => setCouponDescription(e.target.value)}
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="Enter coupon description"
-              rows="2"
-            />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="bg-green-600 text-white px-4 py-2 rounded flex-1 hover:bg-green-700"
+            >
+              Add Coupon
+            </button>
+            <button
+              type="button"
+              onClick={fetchCoupons}
+              className="bg-gray-700 text-white px-4 py-2 rounded flex-1 hover:bg-gray-800"
+            >
+              {loadingCoupons ? "Loading..." : "Fetch Coupons"}
+            </button>
           </div>
-
-          <div>
-            <label className="block text-gray-700 font-medium mb-1">
-              Discount (%)
-            </label>
-            <input
-              type="number"
-              value={discount}
-              onChange={(e) => setDiscount(e.target.value)}
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="Enter discount percentage"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 font-medium mb-1">
-              Expiry Date
-            </label>
-            <input
-              type="date"
-              value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-md p-2"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          >
-            Add Coupon
-          </button>
         </form>
 
-        {/* Display Coupons */}
         {coupons.length > 0 && (
-          <div className="mt-6">
-            <h3 className="font-semibold mb-2">Coupons List:</h3>
-            <ul className="list-disc ml-6 text-gray-700 space-y-2">
-              {coupons.map((c) => (
-                <li key={c.id}>
-                  <strong>{c.code}</strong> — {c.discount}% off{" "}
-                  {c.expiryDate && `(expires on ${c.expiryDate})`}
-                  {c.description && (
-                    <p className="text-gray-600 ml-4 text-sm">
-                      {c.description}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ul className="mt-6 space-y-3">
+            {coupons.map((c) => (
+              <li
+                key={c.id}
+                className={`p-4 rounded-lg border transition-all ${
+                  c.is_active
+                    ? "bg-gray-50 border-gray-200"
+                    : "bg-gray-200 border-gray-300 opacity-80"
+                }`}
+              >
+                {editingCouponId === c.id ? (
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={editingCouponData.code}
+                      onChange={(e) =>
+                        setEditingCouponData({
+                          ...editingCouponData,
+                          code: e.target.value,
+                        })
+                      }
+                      className="w-full border border-gray-300 rounded-md p-2"
+                    />
+                    <input
+                      type="number"
+                      value={editingCouponData.discount}
+                      onChange={(e) =>
+                        setEditingCouponData({
+                          ...editingCouponData,
+                          discount: e.target.value,
+                        })
+                      }
+                      className="w-full border border-gray-300 rounded-md p-2"
+                    />
+                    <input
+                      type="date"
+                      value={editingCouponData.expiry_date || ""}
+                      onChange={(e) =>
+                        setEditingCouponData({
+                          ...editingCouponData,
+                          expiry_date: e.target.value,
+                        })
+                      }
+                      className="w-full border border-gray-300 rounded-md p-2"
+                    />
+                    <textarea
+                      value={editingCouponData.description || ""}
+                      onChange={(e) =>
+                        setEditingCouponData({
+                          ...editingCouponData,
+                          description: e.target.value,
+                        })
+                      }
+                      className="w-full border border-gray-300 rounded-md p-2"
+                      rows="2"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveCoupon(c.id)}
+                        className="bg-green-600 text-white px-4 py-1 rounded flex-1 hover:bg-green-700"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={cancelEditingCoupon}
+                        className="bg-gray-500 text-white px-4 py-1 rounded flex-1 hover:bg-gray-600"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                    <div className="text-gray-800 space-y-1">
+                      <p>
+                        <strong>Coupon Code:</strong> {c.code}
+                      </p>
+                      <p>
+                        <strong>Description:</strong>{" "}
+                        {c.description || "—"}
+                      </p>
+                      <p>
+                        <strong>Discount:</strong> {c.discount}%
+                      </p>
+                      <p>
+                        <strong>Exp:</strong>{" "}
+                        {c.expiry_date || "No expiry"}
+                      </p>
+                      {!c.is_active && (
+                        <p className="text-red-500 text-sm font-semibold">
+                          (Expired)
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 mt-3 sm:mt-0">
+                      <button
+                        onClick={() => startEditingCoupon(c)}
+                        className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteCoupon(c.id)}
+                        className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

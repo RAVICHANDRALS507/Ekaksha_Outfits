@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate } from "react-router-dom";
+import SummaryPage from "./admin/SummaryPage";
+
 
 const HomePage = () => {
   const [products, setProducts] = useState([]);
@@ -13,10 +15,13 @@ const HomePage = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedPriceRanges, setSelectedPriceRanges] = useState([]);
 
-  // --- NEW STATE FOR LIGHTBOX ---
+  // Lightbox
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentProductIndex, setCurrentProductIndex] = useState(0);
-  // ------------------------------
+
+  // ✅ Buy Now Summary popup
+  const [showSummary, setShowSummary] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   const navigate = useNavigate();
 
@@ -27,7 +32,7 @@ const HomePage = () => {
     { label: "₹1500 - ₹1999", min: 1500, max: 1999 },
   ];
 
-  // Fetch products (unchanged)
+  // Fetch products
   const fetchProducts = async () => {
     const { data, error } = await supabase.from("products").select("*");
     if (error) {
@@ -38,7 +43,7 @@ const HomePage = () => {
     setFilteredProducts(data || []);
   };
 
-  // Fetch categories (unchanged)
+  // Fetch categories
   const fetchCategories = async () => {
     const { data, error } = await supabase.from("categories").select("*");
     if (error) {
@@ -58,7 +63,7 @@ const HomePage = () => {
     loadData();
   }, []);
 
-  // Filtering (unchanged)
+  // Filtering logic
   useEffect(() => {
     let filtered = [...products];
 
@@ -83,9 +88,7 @@ const HomePage = () => {
     setFilteredProducts(filtered);
   }, [activeCategory, selectedPriceRanges, products]);
 
-  const handleCategoryClick = (category) => {
-    setActiveCategory(category);
-  };
+  const handleCategoryClick = (category) => setActiveCategory(category);
 
   const togglePriceRange = (range) => {
     setSelectedPriceRanges((prev) =>
@@ -98,10 +101,9 @@ const HomePage = () => {
     setSelectedPriceRanges([]);
   };
 
-  // Add to Cart (unchanged logic, as it adds one offer/bundle)
+  // Add to Cart
   const addToCart = (product) => {
     const cart = JSON.parse(localStorage.getItem("cart")) || [];
-
     const existingIndex = cart.findIndex((item) => item.id === product.id);
 
     if (existingIndex !== -1) {
@@ -111,38 +113,32 @@ const HomePage = () => {
     }
 
     localStorage.setItem("cart", JSON.stringify(cart));
-    // notify same-tab listeners (CartPage, cart icons)
-    try {
-      window.dispatchEvent(new Event("cartUpdated"));
-    } catch (e) {
-      // ignore in SSR or restricted contexts
-    }
-
+    window.dispatchEvent(new Event("cartUpdated"));
     alert(`${product.name} added to cart!`);
   };
 
-  // --- NEW LIGHTBOX HANDLERS ---
-  const openLightbox = (index) => {
-    setCurrentProductIndex(index);
-    setLightboxOpen(true);
+  // ✅ Buy Now → open summary modal
+  const handleBuyNow = (product) => {
+    setSelectedProduct(product);
+    setShowSummary(true);
   };
 
-  const closeLightbox = () => {
-    setLightboxOpen(false);
+  const closeSummary = () => {
+    setSelectedProduct(null);
+    setShowSummary(false);
   };
 
-  const goToPrev = () => {
+  // Lightbox controls
+  const openLightbox = (index) => setCurrentProductIndex(index) || setLightboxOpen(true);
+  const closeLightbox = () => setLightboxOpen(false);
+  const goToPrev = () =>
     setCurrentProductIndex((prevIndex) =>
       prevIndex === 0 ? filteredProducts.length - 1 : prevIndex - 1
     );
-  };
-
-  const goToNext = () => {
+  const goToNext = () =>
     setCurrentProductIndex((prevIndex) =>
       prevIndex === filteredProducts.length - 1 ? 0 : prevIndex + 1
     );
-  };
-  // -----------------------------
 
   const getImageUrl = (product) => {
     let imageUrl = "/placeholder.png";
@@ -161,6 +157,55 @@ const HomePage = () => {
     return imageUrl;
   };
 
+  // Lightbox view
+  const Lightbox = () => {
+    if (!filteredProducts.length) return null;
+    const product = filteredProducts[currentProductIndex];
+    const imageUrl = getImageUrl(product);
+    return (
+      <div
+        className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] p-4"
+        onClick={closeLightbox}
+      >
+        <button
+          onClick={closeLightbox}
+          className="absolute top-4 right-4 text-white text-4xl font-light z-10"
+        >
+          &times;
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            goToPrev();
+          }}
+          className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white text-5xl bg-black bg-opacity-30 rounded-full p-2 hover:bg-opacity-50 hidden sm:block"
+        >
+          &lt;
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            goToNext();
+          }}
+          className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white text-5xl bg-black bg-opacity-30 rounded-full p-2 hover:bg-opacity-50 hidden sm:block"
+        >
+          &gt;
+        </button>
+
+        <img
+          src={imageUrl}
+          alt={product.name}
+          className="max-w-full max-h-screen object-contain cursor-grab"
+          onClick={(e) => e.stopPropagation()}
+        />
+
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white bg-black bg-opacity-50 p-2 rounded-lg text-lg sm:text-2xl font-semibold">
+          {product.name}
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -171,106 +216,13 @@ const HomePage = () => {
     );
   }
 
-  // --- LIGHTBOX COMPONENT (Rendered conditionally) ---
-  const Lightbox = () => {
-    if (!filteredProducts.length) return null;
-
-    const product = filteredProducts[currentProductIndex];
-    const imageUrl = getImageUrl(product);
-
-    return (
-      <div
-        className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] p-4"
-        onClick={closeLightbox}
-      >
-        {/* Close button */}
-        <button
-          onClick={closeLightbox}
-          className="absolute top-4 right-4 text-white text-4xl font-light z-10"
-          aria-label="Close image viewer"
-        >
-          &times;
-        </button>
-
-        {/* Previous button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation(); // Prevent closing lightbox
-            goToPrev();
-          }}
-          className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white text-5xl bg-black bg-opacity-30 rounded-full p-2 hover:bg-opacity-50 transition z-10 hidden sm:block"
-          aria-label="Previous image"
-        >
-          &lt;
-        </button>
-
-        {/* Next button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation(); // Prevent closing lightbox
-            goToNext();
-          }}
-          className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white text-5xl bg-black bg-opacity-30 rounded-full p-2 hover:bg-opacity-50 transition z-10 hidden sm:block"
-          aria-label="Next image"
-        >
-          &gt;
-        </button>
-
-        {/* Image Container with Zoom/Scroll */}
-        <div
-          className="relative max-w-full max-h-full"
-          onClick={(e) => e.stopPropagation()} // Prevent closing when clicking the image area
-        >
-          <img
-            src={imageUrl}
-            alt={product.name}
-            // Tailwind class for zoom/scroll: using transform, cursor, and object-contain
-            className="max-w-full max-h-screen object-contain transition-transform duration-300"
-            style={{
-              // This is the simplest way to allow zoom/pan if the image is larger than the container
-              // For actual robust zoom/pan, a library like 'react-image-magnify' is better,
-              // but these simple classes provide the visual cues you requested.
-              transform: 'scale(1)', // Start scale at 1
-              cursor: 'grab', // Suggests it can be dragged/panned
-              // Note: True zoom/pan requires more complex state management or a dedicated library
-            }}
-          />
-        </div>
-        
-        {/* Product Name overlay */}
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white bg-black bg-opacity-50 p-2 rounded-lg text-lg sm:text-2xl font-semibold">
-            {product.name}
-        </div>
-      </div>
-    );
-  };
-  // ----------------------------------------------------
-
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-10 relative">
       <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8 text-gray-800">
         Explore Our Outfits
       </h1>
 
-      {/* ... (Filter and Category buttons are unchanged) ... */}
-      <div className="hidden sm:flex justify-center mb-4">
-        <button
-          onClick={clearFilters}
-          className="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400 transition duration-300"
-        >
-          Clear Filters
-        </button>
-      </div>
-
-      <div className="flex justify-end mb-4 sm:hidden">
-        <button
-          onClick={() => setIsFilterOpen(true)}
-          className="bg-amber-500 text-white px-4 py-2 rounded-lg shadow hover:bg-amber-600"
-        >
-          Filter
-        </button>
-      </div>
-
+      {/* Filter buttons */}
       <div className="hidden sm:flex flex-wrap justify-center gap-3 sm:gap-4 mb-8">
         {categories.map((category) => (
           <button
@@ -287,113 +239,43 @@ const HomePage = () => {
         ))}
       </div>
 
-      {isFilterOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white w-11/12 max-w-sm max-h-[80vh] rounded-xl p-5 shadow-xl overflow-y-auto relative">
-            <button
-              onClick={() => setIsFilterOpen(false)}
-              className="absolute top-3 right-3 text-gray-600 text-2xl font-bold hover:text-gray-800"
-            >
-              &times;
-            </button>
-
-            <h2 className="text-xl font-semibold mb-4">Filters</h2>
-
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Category</h3>
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => handleCategoryClick(category)}
-                  className={`block w-full text-left px-3 py-2 rounded-md mb-1 ${
-                    activeCategory === category
-                      ? "bg-amber-500 text-white"
-                      : "bg-gray-100 hover:bg-gray-200"
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-
-            <div>
-              <h3 className="font-semibold mb-2">Price Range</h3>
-              {priceRanges.map((range) => (
-                <label key={range.label} className="flex items-center mb-2">
-                  <input
-                    type="checkbox"
-                    className="mr-2"
-                    checked={selectedPriceRanges.includes(range)}
-                    onChange={() => togglePriceRange(range)}
-                  />
-                  {range.label}
-                </label>
-              ))}
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={clearFilters}
-                className="flex-1 bg-gray-300 text-gray-800 py-2 rounded-lg hover:bg-gray-400 transition duration-300"
-              >
-                Clear Filters
-              </button>
-              <button
-                onClick={() => setIsFilterOpen(false)}
-                className="flex-1 bg-amber-500 text-white py-2 rounded-lg hover:bg-amber-600 transition duration-300"
-              >
-                Apply Filters
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {filteredProducts.length === 0 ? (
         <p className="text-center text-gray-600">No products found.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredProducts.map((product, index) => {
             const imageUrl = getImageUrl(product);
-
             return (
               <div
                 key={product.id}
                 className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition duration-300"
               >
-                {/* --- CLICK HANDLER ADDED HERE --- */}
                 <img
                   src={imageUrl}
                   alt={product.name}
                   className="w-full h-56 object-cover cursor-pointer"
-                  onClick={() => openLightbox(index)} // Open lightbox on image click
+                  onClick={() => openLightbox(index)}
                 />
-                {/* --------------------------------- */}
-
                 <div className="p-4 space-y-2">
                   <h2 className="text-lg font-semibold text-gray-800">
                     {product.name}
                   </h2>
-
                   <p className="text-sm text-gray-700">
                     <span className="font-semibold text-gray-800">Offer:</span>{" "}
                     {product.quantity
                       ? `${product.quantity} items for ₹${product.offer_price}`
                       : "No active offer"}
                   </p>
-
                   <p className="text-sm text-gray-700">
                     <span className="font-semibold">Size:</span>{" "}
                     <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
                       {product.size}
                     </span>
                   </p>
-
                   <p className="text-sm text-gray-700">
                     <span className="font-semibold">Category:</span>{" "}
                     {product.categories}
                   </p>
-
                   <p
                     className={`text-sm font-semibold ${
                       product.stock_status === "In Stock"
@@ -403,15 +285,9 @@ const HomePage = () => {
                   >
                     {product.stock_status}
                   </p>
-
-                  <p className="text-gray-600 text-sm line-clamp-3">
-                    {product.description || "No description available."}
-                  </p>
-
                   <p className="text-lg font-bold text-amber-600">
                     ₹{product.offer_price}
                   </p>
-
                   <div className="mt-3 flex flex-col sm:flex-row gap-2">
                     <button
                       onClick={() => addToCart(product)}
@@ -419,7 +295,10 @@ const HomePage = () => {
                     >
                       Add to Cart
                     </button>
-                    <button className="flex-1 bg-amber-500 text-white text-sm py-2 rounded-lg hover:bg-amber-600 transition duration-300">
+                    <button
+                      onClick={() => handleBuyNow(product)} // ✅ Opens summary popup
+                      className="flex-1 bg-amber-500 text-white text-sm py-2 rounded-lg hover:bg-amber-600 transition duration-300"
+                    >
                       Buy Now
                     </button>
                   </div>
@@ -430,9 +309,37 @@ const HomePage = () => {
         </div>
       )}
 
-      {/* Render Lightbox when open */}
+      {/* Lightbox view */}
       {lightboxOpen && <Lightbox />}
 
+      {/* ✅ Summary Popup Modal */}
+      {showSummary && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
+          <div className="bg-white w-11/12 sm:w-1/2 md:w-1/3 rounded-xl p-6 shadow-xl relative">
+            <button
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 text-xl"
+              onClick={closeSummary}
+            >
+              &times;
+            </button>
+
+            <SummaryPage
+              totalItems={selectedProduct.quantity || 1}
+              totalPrice={selectedProduct.offer_price}
+              discountPercent={0}
+              discountAmount={0}
+              selectedCoupon={null}
+              finalTotal={selectedProduct.offer_price}
+              coupons={[]} // No coupons in direct buy mode
+              selectedCouponHandler={() => {}}
+              clearCouponHandler={() => {}}
+              openCouponModal={() => {}}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Floating Cart Button */}
       <button
         onClick={() => navigate("/cart")}
         className="sm:hidden fixed bottom-5 right-5 bg-amber-500 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center text-2xl hover:bg-amber-600 transition duration-300 z-50"
